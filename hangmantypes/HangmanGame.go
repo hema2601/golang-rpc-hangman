@@ -34,6 +34,9 @@ func (h_game *HangmanGame)Init(){
     h_game.Log[1] = ""
     h_game.Log[2] = ""
 
+    h_game.H_str.Init("")
+    
+    h_game.H_str.Revealed = append(h_game.H_str.Revealed, false )
 
     //fmt.Print("Enter your string: ")
 

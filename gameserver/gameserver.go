@@ -45,18 +45,21 @@ func InitPlayer(id PlayerId, addr PlayerAddress)( Player, error){
     return player, nil
 }
 
-type PlayerMetadata struct{
+type LobbyData struct{
     PlayerCount int
     Players [] PlayerId
+    Addr PlayerAddress
 }
 
 type HangmanGameServer struct {
     H_game hangmantypes.HangmanGame
+    Addr PlayerAddress
     PlayerCount int
     Players [] Player
     LastTurn PlayerId
     CurrPlayer PlayerId
     Running bool
+    Active bool
 }
 
 func (h_gameserver *HangmanGameServer) GetNewPid() (PlayerId, error){
@@ -102,6 +105,10 @@ func (h_gameserver *HangmanGameServer)Join(addr *PlayerAddress, pid *PlayerId) e
     if h_gameserver.Running == true{
         return errors.New("Game is running")
     }
+    
+    if h_gameserver.Active == false{
+        return errors.New("Inactive server")
+    }
 
     *pid, err = h_gameserver.GetNewPid()  
     //create new player Client
@@ -119,9 +126,11 @@ func (h_gameserver *HangmanGameServer)Join(addr *PlayerAddress, pid *PlayerId) e
     h_gameserver.PlayerCount++
 
     var tmp uint8
-    var player_info PlayerMetadata
+    var player_info LobbyData
     player_info.PlayerCount = h_gameserver.PlayerCount
     player_info.Players = make([]PlayerId, player_info.PlayerCount)
+    player_info.Addr = h_gameserver.Addr 
+
     for i, p := range h_gameserver.Players{
         player_info.Players[i] = p.Pid
     }
@@ -145,15 +154,40 @@ func (h_gameserver *HangmanGameServer)Join(addr *PlayerAddress, pid *PlayerId) e
 func (h_gameserver *HangmanGameServer)QuitLobby(pid *PlayerId, result *bool) error{
 
     //fmt.Println("Player", *pid, "quit the lobby")
+    
+    p, _ := h_gameserver.GetPlayerByPid(*pid)
+
 
     h_gameserver.Quit(pid, result)
 
+    if p.IsHost == true{
+        h_gameserver.Active = false
+        fmt.Println("Admin Left!")
+
+        var tmp1, tmp2 bool
+
+        for _, p := range h_gameserver.Players{
+            err := p.Client.Call("HangmanPlayerServer.TerminateLobby", &tmp1, &tmp2)
+            if err != nil {
+                fmt.Println("Error:", err)
+            }
+        }
+
+        //[TODO] Quit all other players
+
+        return nil;
+
+    }
+
+    
+
     var tmp uint8
     var err error
-    var player_info PlayerMetadata
+    var player_info LobbyData
 
     player_info.PlayerCount = h_gameserver.PlayerCount
     player_info.Players = make([]PlayerId, player_info.PlayerCount)
+    player_info.Addr = h_gameserver.Addr 
 
     for i, p := range h_gameserver.Players{
         player_info.Players[i] = p.Pid
@@ -167,6 +201,11 @@ func (h_gameserver *HangmanGameServer)QuitLobby(pid *PlayerId, result *bool) err
         }
     }
 
+    return nil
+}
+
+
+func (h_gameserver *HangmanGameServer)CleanupServer() error{
     return nil
 }
 
@@ -454,6 +493,7 @@ func (h_gameserver *HangmanGameServer)Run() error {
     h_gameserver.LastTurn = PlayerId(0);
     for{
         h_gameserver.H_game.Init()
+        h_gameserver.ShareState()
 
         for{
 
@@ -486,9 +526,9 @@ func (h_gameserver *HangmanGameServer)Run() error {
         h_gameserver.ShareState()
 
 
-        end_game, _ := h_gameserver.GameEpilogue()
+        again, _ := h_gameserver.GameEpilogue()
 
-        if end_game == false {
+        if again == false {
             //fmt.Println("Ending Game")
             break
         }
@@ -593,12 +633,29 @@ func (h_gameserver *HangmanGameServer)ShareState() error {
     return nil
 
 }
+
+//Function taken from Stackoverflow
+//https://stackoverflow.com/questions/23558425/how-do-i-get-the-local-ip-address-in-go
+
+func GetOutboundIP() string {
+    conn, err := net.Dial("udp", "8.8.8.8:80")
+    if err != nil {
+        fmt.Println("Error:", err)
+    }
+    defer conn.Close()
+
+    localAddr := conn.LocalAddr().(*net.UDPAddr)
+
+    return localAddr.IP.String()
+}
+
 func Init() (*HangmanGameServer, error){
 
     h_gameserver := new(HangmanGameServer)
     
     h_gameserver.PlayerCount = 0
     h_gameserver.Running = false
+    h_gameserver.Active = true
     handler:= rpc.NewServer()
 
     err := handler.Register(h_gameserver)
@@ -619,12 +676,17 @@ func Init() (*HangmanGameServer, error){
         return h_gameserver, errors.New("Failed to Listen")
     }
 
+   h_gameserver.Addr.Ip = GetOutboundIP() 
+    h_gameserver.Addr.Port = "1234"
+
+
     go func() {
         for{
             cxn, _ := listener.Accept()
             go handler.ServeConn(cxn)
         }
     }()
+
 
     return h_gameserver, nil
 

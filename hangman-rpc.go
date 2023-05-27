@@ -4,10 +4,10 @@ import (
     "hema/hangman/rpc/gameserver"
     "hema/hangman/rpc/playerserver"
     "hema/hangman/rpc/asyncio"
+    "hema/hangman/rpc/hangmandisplay"
     "fmt"
     "net/rpc"
     "errors"
-    "os"
     "net"
     "strings"
     "strconv"
@@ -23,12 +23,12 @@ type Args struct {}
 
 func JoinGame(ip string, port string, player_server *playerserver.HangmanPlayerServer) error{
     
-    fmt.Println("Called Join")
+    //fmt.Println("Called Join")
 
     //create ones own player server
     //player_server, err := playerserver.Init(io)
     
-    fmt.Println("created player server")
+    //fmt.Println("created player server")
 
 
     //connect to game server
@@ -40,7 +40,7 @@ func JoinGame(ip string, port string, player_server *playerserver.HangmanPlayerS
         fmt.Println(err)
         return errors.New("Could not connect to Game Server")
     }else{
-        fmt.Println("Connected!")
+      //  fmt.Println("Connected!")
     }
 
     
@@ -114,7 +114,7 @@ func host(player *playerserver.HangmanPlayerServer) error {
         fmt.Println(err)
         return err
     }else{
-        fmt.Println("Joined!")
+        //fmt.Println("Joined!")
     }
 
     return nil
@@ -124,53 +124,37 @@ func host(player *playerserver.HangmanPlayerServer) error {
 func WaitingForGameToEnd(player *playerserver.HangmanPlayerServer){
     <- player.GameEnd
 
-    fmt.Println("Finished Waiting!")
+    //fmt.Println("Finished Waiting!")
 }
 
 func lobby(role int, player *playerserver.HangmanPlayerServer)(error){
 
     var choice int
-/*
-    fmt.Println("----- HANGMAN LOBBY -----\n")
-
-    ip := "1.2.3.4"
-    port := "1111"
-    
-    fmt.Println("IP:\t", ip, "\nPort:\t", port);
-
-    fmt.Println("\n==========================\n")
-
-    var playerString string = "PlayerX"
-
-    fmt.Println("PLAYERS [6/8]\n")
-
-    fmt.Println(playerString, "\t", playerString)
-    fmt.Println(playerString, "\t", playerString)
-    fmt.Println(playerString, "\t", "")
-    fmt.Println(playerString, "\t", "")
-    fmt.Println("\n==========================\n\n")
-    fmt.Println("\n==========================\n")
-    fmt.Println("[1] Start Game (Host only)\n[2] Leave Lobby\n")
-*/
 
     var res bool
     var err error
-
-
-
+for{
     input := io.RequestLineSignal(player.GameStart)
 
-    //close(player.GameStart)
-        //fmt.Scanf("%d", &choice)
 
     if(input.Canceled == true){
-        WaitingForGameToEnd(player)
+        fmt.Println("Cancelled")
+        select{
+            case <-player.LobbyTerminated:
+
+            default:
+                WaitingForGameToEnd(player)
+                
+        }
+        break
     }else{
     
         choice, err = strconv.Atoi(input.Result)
 
         if err != nil {
+            fmt.Println("Why am I still here?")
             fmt.Println(err)
+            break;
         }
 
         if choice == 1 {
@@ -182,6 +166,7 @@ func lobby(role int, player *playerserver.HangmanPlayerServer)(error){
                     return err
                 }else{
                     WaitingForGameToEnd(player)
+                    break
                 }
             }         
 
@@ -193,11 +178,12 @@ func lobby(role int, player *playerserver.HangmanPlayerServer)(error){
                 fmt.Println("Error while quitting game")
                 return err
             }
-            os.Exit(1);
+            break;
+            //os.Exit(1);
 
         }
     }
-
+}
     return nil
 
 }
@@ -233,7 +219,7 @@ func findPort()(int, error){
         fmt.Println("Error:", err)
         return -1, err
     }
-   fmt.Println("Port:", port)
+   //fmt.Println("Port:", port)
 
     return port, nil
 
@@ -242,29 +228,20 @@ func findPort()(int, error){
 
 func test(){
 
-    io, _ := asyncio.NewIoInstance()
 
-    io.Launch()
+    _, _ = gameserver.Init()
+
+
+    for{}
     
-    for{
-    
-        resp := io.RequestLineTimeout(10)
-
-        if resp.Canceled == true{
-            fmt.Println("Timed out")
-        }else{
-            fmt.Println("User Input:", resp.Result)
-        }
-
-    }
 
 }
 
 func main() {
 
 
-    //test()
-    //return
+ //   test()
+  //  return
 
     io, _ = asyncio.NewIoInstance()
     io.Launch()
@@ -278,6 +255,8 @@ func main() {
     player, err = playerserver.Init(io)
 
     for{
+
+        hangmandisplay.Clear()
         fmt.Println("Welcome To HANGMAN!\n")
 
         fmt.Println("[1] Host New Game\t\t[2] Join Game")

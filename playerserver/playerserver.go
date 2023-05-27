@@ -24,6 +24,7 @@ type HangmanPlayerServer struct {
     GameClient *rpc.Client
     GameStart chan int
     GameEnd chan int
+    LobbyTerminated chan int
     Address gameserver.PlayerAddress
     io asyncio.IoInstance
 }
@@ -73,10 +74,10 @@ func (h_playerserver *HangmanPlayerServer) EndGameChoice( pid *gameserver.Player
     *reply = h_playerserver.io.RequestLineTimeout(10) 
 
     if reply.Canceled == true || reply.Result == "q"{
-        fmt.Println("Quit Game")
+        //fmt.Println("Quit Game")
         h_playerserver.GameEnd <- 1
     }else{
-        fmt.Println("Continue")
+        //fmt.Println("Continue")
     }
 
     //}else{
@@ -84,7 +85,7 @@ func (h_playerserver *HangmanPlayerServer) EndGameChoice( pid *gameserver.Player
         
     //}
 
-    fmt.Println("Returning")
+    //fmt.Println("Returning")
     return nil
 }
 
@@ -107,7 +108,8 @@ func (h_playerserver *HangmanPlayerServer) UpdateDisplay(h_game *hangmantypes.Ha
 
 
     h_game.PrintState();
-    fmt.Println("Updated Display...")
+    //fmt.Println("Updated Display...")
+
 
     return nil
 
@@ -117,7 +119,7 @@ func (h_playerserver *HangmanPlayerServer) StartGame(args *uint8, reply *uint8) 
 
     //go h_playerserver.InteractiveInput()
 
-    fmt.Println("The game has started!")
+    //fmt.Println("The game has started!")
     
     h_playerserver.GameStart <- 1
 
@@ -174,23 +176,34 @@ func (p HangmanPlayerServer)QuitLobby()(error){
          fmt.Println("Error:", err)
          return -1, err
      }
-    fmt.Println("Port:", port)
+    //fmt.Println("Port:", port)
 
      return port, nil
 
  }
 
-func (h_playerserver *HangmanPlayerServer)UpdateLobby(server *gameserver.PlayerMetadata, reply *uint8) error{
+func (h_playerserver *HangmanPlayerServer)TerminateLobby(reason *bool, reply *bool) error{
+
+    h_playerserver.LobbyTerminated <- 1
+    h_playerserver.GameStart <- 1
+
+    fmt.Println("The Lobby was terminated due to the Admin leaving...")
+
+    return nil
+
+}
+
+func (h_playerserver *HangmanPlayerServer)UpdateLobby(server *gameserver.LobbyData, reply *uint8) error{
 
     hangmandisplay.Clear()
 
 
     fmt.Println("----- HANGMAN LOBBY -----\n")
 
-    ip := "1.2.3.4"
-    port := "1111"
+    //ip := "1.2.3.4"
+    //port := "1111"
 
-    fmt.Println("IP:\t", ip, "\nPort:\t", port);
+    fmt.Println("IP:\t", server.Addr.Ip, "\nPort:\t", server.Addr.Port);
 
     fmt.Println("\n==========================\n")
 
@@ -211,7 +224,7 @@ func (h_playerserver *HangmanPlayerServer)UpdateLobby(server *gameserver.PlayerM
         }
 
     }
-    fmt.Println("\n==========================\n\n")
+    //fmt.Println("\n==========================\n\n")
     fmt.Println("\n==========================\n")
     fmt.Println("[1] Start Game (Host only)\n[2] Leave Lobby\n")
 
@@ -253,15 +266,16 @@ func Init(io asyncio.IoInstance) (*HangmanPlayerServer, error){
     h_playerserver.Address.Port = port
     h_playerserver.GameStart = make(chan int, 1)
     h_playerserver.GameEnd = make(chan int, 1)
+    h_playerserver.LobbyTerminated = make(chan int, 1)
     h_playerserver.io = io
 
   //  go http.Serve(listener, nil)
 
      go func() {
          for{
-             fmt.Println("WAiting", port)
+             //fmt.Println("WAiting", port)
              cxn, _ := listener.Accept()
-             fmt.Println("ACcepted", port)
+             //fmt.Println("ACcepted", port)
              go handler.ServeConn(cxn)
          }
      }()

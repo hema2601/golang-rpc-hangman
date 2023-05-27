@@ -3,7 +3,6 @@ package asyncio
 import(
     "bufio"
     "os"
-    "fmt"
     "time"
 )
 
@@ -84,6 +83,9 @@ func (io *IoInstance) RequestHandler() error{
                 }
                 req.Request.Completed = true
                 req.Request.Canceled = false
+                if(req.Request.Type == 2){
+                    req.Request.Signal <- 1
+                }
                 var resp IoResponse
                 resp.Canceled = false
                 resp.Result = str[:len(str)-1]
@@ -91,7 +93,6 @@ func (io *IoInstance) RequestHandler() error{
                 req.Request.mut.Unlock()
             }
         case <-io.Input:
-            fmt.Println("Discarding irrelevant Input ")
         }
     }
 }
@@ -124,6 +125,7 @@ func RequestSignalHandler(running RunningIoRequest){
         return
     } 
 
+
     running.Signal <- true
     running.Request.Canceled = true
     var resp IoResponse
@@ -136,7 +138,6 @@ func (io *IoInstance) RequestScheduler() error{
     for{
         newReq := <-io.Requests 
     
-        //fmt.Println("Got Request to schedule!")
 
         var running RunningIoRequest
 
@@ -181,7 +182,6 @@ func (io *IoInstance)RequestLine() IoResponse{
     req.Response = make(chan IoResponse)
     req.mut.Init() 
 
-    //fmt.Println("Inserting req into request channel")
 
     io.Requests <- &req
 
@@ -200,7 +200,6 @@ func (io *IoInstance)RequestLineTimeout(time int) IoResponse{
     req.Response = make(chan IoResponse)
     req.mut.Init() 
 
-    //fmt.Println("Inserting req into request channel")
 
     io.Requests <- &req
 
