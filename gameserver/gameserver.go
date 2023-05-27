@@ -127,7 +127,7 @@ func (h_gameserver *HangmanGameServer)Join(addr *PlayerAddress, pid *PlayerId) e
     }
 
     for _, p := range h_gameserver.Players{
-        fmt.Println("Hi?")
+        //fmt.Println("Hi?")
         err = p.Client.Call("HangmanPlayerServer.UpdateLobby", &player_info, &tmp)
     
         if err != nil{
@@ -136,7 +136,7 @@ func (h_gameserver *HangmanGameServer)Join(addr *PlayerAddress, pid *PlayerId) e
     
     }
 
-    fmt.Println("A new player joined! (Player", *pid, ")")
+    //fmt.Println("A new player joined! (Player", *pid, ")")
 
     return nil
 
@@ -144,7 +144,7 @@ func (h_gameserver *HangmanGameServer)Join(addr *PlayerAddress, pid *PlayerId) e
 
 func (h_gameserver *HangmanGameServer)QuitLobby(pid *PlayerId, result *bool) error{
 
-    fmt.Println("Player", *pid, "quit the lobby")
+    //fmt.Println("Player", *pid, "quit the lobby")
 
     h_gameserver.Quit(pid, result)
 
@@ -159,7 +159,7 @@ func (h_gameserver *HangmanGameServer)QuitLobby(pid *PlayerId, result *bool) err
         player_info.Players[i] = p.Pid
     }
     for _, p := range h_gameserver.Players{
-        fmt.Println("Updating!")
+        //fmt.Println("Updating!")
         err = p.Client.Call("HangmanPlayerServer.UpdateLobby", &player_info, &tmp)
 
         if err != nil{
@@ -192,8 +192,9 @@ func (h_gameserver *HangmanGameServer)Quit(pid *PlayerId, result *bool) error{
             h_gameserver.Players[i] = h_gameserver.Players[h_gameserver.PlayerCount-1]
             break
         }
-    } 
+    }
     h_gameserver.PlayerCount--
+    //fmt.Println("Decremented player count to ", h_gameserver.PlayerCount)
 
     h_gameserver.Players = h_gameserver.Players[:h_gameserver.PlayerCount]
 /*
@@ -242,13 +243,13 @@ func (h_gameserver *HangmanGameServer)StartGame(pid *PlayerId, result *bool) err
 
 func EndGamePlayerChoice(p Player, pid PlayerId, done chan PlayerId, error_chan chan error, res *asyncio.IoResponse){
     
-    fmt.Println("Send msg to ", pid)
-    err := p.Client.Call("HangmanPlayerServer.EndGame", &pid, res)
+    //fmt.Println("Send msg to ", pid)
+    err := p.Client.Call("HangmanPlayerServer.EndGameChoice", &pid, res)
     if err != nil{
         fmt.Println("Error in EndGamePlayerChoice:", err)
     }
     
-    fmt.Println("Received answer from ", pid)
+    //fmt.Println("Received answer from ", pid)
 
     done <- pid
     error_chan <- err
@@ -257,10 +258,66 @@ func EndGamePlayerChoice(p Player, pid PlayerId, done chan PlayerId, error_chan 
 
 }
 
-func (h_gameserver *HangmanGameServer)EndGame() (bool, error) {
+
+func(h_gameserver *HangmanGameServer) SendTerminate(reason int, p Player, done chan bool) error{
+
+    var res bool
+
+    err := p.Client.Call("HangmanPlayerServer.EndGame", &reason, &res)
+
+    if err != nil{
+        fmt.Println("Error in SendTerminate:", err)
+    }
+
+    done <- true
+
+    return err
+
+}
+func(h_gameserver *HangmanGameServer) TerminatePlayers(fewPlayers bool, noAdmin bool) error{
+
+    var tmp bool
+   
+    done := make(chan bool)
+
+    var reason int
+    if noAdmin == true {
+        reason = 1
+    }else if fewPlayers == true {
+        reason = 2
+    }else{
+        //fmt.Println("Returning Prematurely")
+        return nil
+    }
+
+    //fmt.Println("Number of Players Left:", h_gameserver.PlayerCount)
+
+    for _, p := range h_gameserver.Players{
+        //fmt.Println("Sending EndGame to Player", p.Pid)
+
+        go h_gameserver.SendTerminate(reason, p, done)
+    }
+
+    for _,_ = range h_gameserver.Players{
+        <-done
+    }
+
+    players_copy := h_gameserver.Players[:]
+
+    for _, p := range players_copy{
+        //fmt.Println("Sending Quit to Player", p.Pid)
+        h_gameserver.Quit(&p.Pid, &tmp);
+    }
+
+    return nil
+
+}
+
+func (h_gameserver *HangmanGameServer)GameEpilogue() (bool, error) {
     
 
     res := make([]asyncio.IoResponse, h_gameserver.PlayerCount)
+    quit := make([]PlayerId, 0)
     done := make(chan PlayerId)
     error_chan := make(chan error)
 
@@ -274,34 +331,64 @@ func (h_gameserver *HangmanGameServer)EndGame() (bool, error) {
     var curr_pid PlayerId
     var temp bool
     var err error
+    adminLeft := false
 
-    for i := 0; i < h_gameserver.PlayerCount; i++{
-        fmt.Println("Waiting for player response")
+    count := h_gameserver.PlayerCount
+
+    //fmt.Println(count, " players left at the beginning")
+
+    for i := 0; i < count; i++{
+        //fmt.Println("Waiting for player response")
          curr_pid = <- done;
-        fmt.Println("Response from Player", curr_pid)
+        //fmt.Println("Response from Player", curr_pid)
 
          idx, err = h_gameserver.GetIndexByPid(curr_pid);
          
          err = <- error_chan
          if err != nil{
-            fmt.Println("Error in EndGame:", err)
+            fmt.Println("Error in GameEpilogue:", err)
             return false, err
          }
     
 
          if res[idx].Canceled == true {
-            h_gameserver.Quit(&curr_pid, &temp);
+            if h_gameserver.Players[idx].IsHost == true{
+                    //fmt.Println("Admin left!")
+                    adminLeft = true
+
+            }
+            //fmt.Println("Player", curr_pid, "quit (Cancelled)")
+            quit = append(quit, curr_pid)
+            //h_gameserver.Quit(&curr_pid, &temp);
          }else{
             if res[idx].Result == "q"{
-                h_gameserver.Quit(&curr_pid, &temp);
+                if h_gameserver.Players[idx].IsHost == true{
+                    //fmt.Println("Admin left!")
+                    adminLeft = true
+                }
+                //fmt.Println("Player", curr_pid, "quit (res[",idx,"]", res[idx].Result, ")")
+                //h_gameserver.Quit(&curr_pid, &temp);
+                quit = append(quit, curr_pid)
             }
+
+            
 
          }
 
 
     }
 
-    if(h_gameserver.PlayerCount < 2){
+    //fmt.Println("Got all responses");
+
+    for _, id := range quit {
+        h_gameserver.Quit(&id, &temp);
+    }
+
+
+
+    if(h_gameserver.PlayerCount < 2 || adminLeft == true){
+        //fmt.Println("Quitting Game")
+        h_gameserver.TerminatePlayers(h_gameserver.PlayerCount < 2, adminLeft == true)
         h_gameserver.Running = false
     }
 
@@ -399,10 +486,10 @@ func (h_gameserver *HangmanGameServer)Run() error {
         h_gameserver.ShareState()
 
 
-        end_game, _ := h_gameserver.EndGame()
+        end_game, _ := h_gameserver.GameEpilogue()
 
         if end_game == false {
-            fmt.Println("Ending Game")
+            //fmt.Println("Ending Game")
             break
         }
     }

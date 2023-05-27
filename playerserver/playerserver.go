@@ -12,6 +12,7 @@ import(
     "strings"
     "strconv"
     "hema/hangman/rpc/asyncio"
+    "time"
 )
 
 
@@ -41,7 +42,28 @@ func (h_playerserver *HangmanPlayerServer) GetString( pid *gameserver.PlayerId, 
     return nil
 }
 
-func (h_playerserver *HangmanPlayerServer) EndGame( pid *gameserver.PlayerId, reply *asyncio.IoResponse) error{
+func (h_playerserver *HangmanPlayerServer) EndGame( reason *int, reply *bool) error{
+
+    fmt.Print("The game has ended due to ")
+
+    if(*reason == 1){
+        fmt.Println("the admin leaving the game.")
+    }else if(*reason == 2){ 
+        fmt.Println("a lack of players.")
+    }
+
+    fmt.Println("You will be returned to the Main Menu in 5 seconds...")
+
+    *reply = true
+
+    time.Sleep(5 * time.Second)
+
+    h_playerserver.GameEnd <- 1
+
+    return nil
+
+}
+func (h_playerserver *HangmanPlayerServer) EndGameChoice( pid *gameserver.PlayerId, reply *asyncio.IoResponse) error{
 
     fmt.Println("The game has ended. Send 'q' if you want to leave, send anything else if you want to continue. You have 10 seconds")
 

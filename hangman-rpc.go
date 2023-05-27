@@ -176,7 +176,7 @@ func lobby(role int, player *playerserver.HangmanPlayerServer)(error){
         if choice == 1 {
 
             if role == 1 {
-                err = player.GameClient.Call("HangmanGameServer.StartGame", &player.Pid, &res)
+                go player.GameClient.Call("HangmanGameServer.StartGame", &player.Pid, &res)
                 if(err != nil){ 
                     fmt.Println("Error while starting game")
                     return err

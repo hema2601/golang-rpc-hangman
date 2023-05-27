@@ -14,6 +14,9 @@ type LetterArray struct{
 
 func (l_arr *LetterArray)Init(){
     l_arr.Letters = "abcdefghijklmnopqrstuvwxyz"
+    for i, _ := range l_arr.Status{
+        l_arr.Status[i] = 0
+    }
 }
 
 func (l_arr *LetterArray)Update(pos uint8, found bool) error{

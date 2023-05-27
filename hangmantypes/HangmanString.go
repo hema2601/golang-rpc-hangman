@@ -17,6 +17,8 @@ func (h_str *HangmanString) Init(str string){
     
     h_str.Word = str
 
+    h_str.Revealed = make([]bool,0)
+
     for _, char := range str {
         if ((char <= 'z' && char >= 'a') || (char <= 'Z' && char >= 'A')){
             h_str.Revealed = append(h_str.Revealed, false)
