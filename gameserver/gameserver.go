@@ -55,6 +55,8 @@ type HangmanGameServer struct {
     PlayerCount int
     Players [] Player
     LastTurn PlayerId
+    CurrPlayer PlayerId
+    Running bool
 }
 
 func (h_gameserver *HangmanGameServer) GetNewPid() (PlayerId, error){
@@ -86,6 +88,10 @@ func (h_gameserver *HangmanGameServer) GetPlayerByPid(pid PlayerId) (*Player, er
 func (h_gameserver *HangmanGameServer)Join(addr *PlayerAddress, pid *PlayerId) error {
    
     var err error
+
+    if h_gameserver.Running == true{
+        return errors.New("Game is running")
+    }
 
     *pid, err = h_gameserver.GetNewPid()  
     //create new player Client
@@ -181,13 +187,32 @@ func (h_gameserver *HangmanGameServer)StartGame(pid *PlayerId, result *bool) err
 
     var tmp1, tmp2 uint8 
 
+    h_gameserver.Running = true 
+
     for _, p := range h_gameserver.Players{
         p.Client.Call("HangmanPlayerServer.StartGame", &tmp1, &tmp2)
     }
 
+
+
     h_gameserver.H_game.Init()
 
     h_gameserver.Run()
+
+    return nil
+}
+
+func (h_gameserver *HangmanGameServer)EndGame(pid *PlayerId, result *bool) error {
+    
+
+    var tmp1, tmp2 uint8 
+
+    for _, p := range h_gameserver.Players{
+        p.Client.Call("HangmanPlayerServer.EndGame", &tmp1, &tmp2)
+    }
+
+
+    h_gameserver.Running = false
 
     return nil
 }
@@ -253,6 +278,7 @@ func (h_gameserver *HangmanGameServer)Run() error {
         response, err = h_gameserver.ChooseString()
 
         if response.Canceled == false {
+            h_gameserver.CurrPlayer = h_gameserver.LastTurn
             h_gameserver.H_game.H_str.Init(response.Result)
             break
         }
@@ -275,25 +301,26 @@ func (h_gameserver *HangmanGameServer)Run() error {
     
     }
     
-
     h_gameserver.ShareState()
+    //h_gameserver.GameOver()
 
     return nil
 }
 
 
-func (h_gameserver *HangmanGameServer)ChooseNextPlayer() (PlayerId, error){
+func (s *HangmanGameServer)ChooseNextPlayer() (PlayerId, error){
 
     
-    for i, p := range h_gameserver.Players{
-        if p.Pid == h_gameserver.LastTurn{
-            if i == h_gameserver.PlayerCount - 1{
-                h_gameserver.LastTurn = h_gameserver.Players[0].Pid
-                return h_gameserver.LastTurn, nil
+    for i, p := range s.Players{
+        if p.Pid == s.LastTurn{
+             
+            if s.Players[(i+1)%s.PlayerCount].Pid != s.CurrPlayer{
+                s.LastTurn = s.Players[(i+1)%s.PlayerCount].Pid
             }else{
-                h_gameserver.LastTurn = h_gameserver.Players[i+1].Pid
-               return h_gameserver.LastTurn, nil
+                s.LastTurn = s.Players[(i+2)%s.PlayerCount].Pid
             }
+
+            return s.LastTurn, nil
         }
     }
 
@@ -382,7 +409,7 @@ func Init() (*HangmanGameServer, error){
     h_gameserver := new(HangmanGameServer)
     
     h_gameserver.PlayerCount = 0
-
+    h_gameserver.Running = false
     handler:= rpc.NewServer()
 
     err := handler.Register(h_gameserver)

@@ -5,7 +5,7 @@
 
 
 [ ] Return to the lobby after winning (or restart the game)
-[ ] Skip Guess from the person who chose the word
+[X] Skip Guess from the person who chose the word
 [ ] Update Port and IP in Lobby
 [ ] Fix Hangman Bugs
 [ ] Improve Logging (Both Lobby and Game)
