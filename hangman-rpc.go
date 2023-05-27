@@ -21,12 +21,12 @@ var io asyncio.IoInstance
 type Args struct {}
 
 
-func JoinGame(ip string, port string)(*playerserver.HangmanPlayerServer, error){
+func JoinGame(ip string, port string, player_server *playerserver.HangmanPlayerServer) error{
     
     fmt.Println("Called Join")
 
     //create ones own player server
-    player_server, err := playerserver.Init(io)
+    //player_server, err := playerserver.Init(io)
     
     fmt.Println("created player server")
 
@@ -38,7 +38,7 @@ func JoinGame(ip string, port string)(*playerserver.HangmanPlayerServer, error){
 
     if(err != nil){
         fmt.Println(err)
-        return player_server, errors.New("Could not connect to Game Server")
+        return errors.New("Could not connect to Game Server")
     }else{
         fmt.Println("Connected!")
     }
@@ -55,18 +55,18 @@ func JoinGame(ip string, port string)(*playerserver.HangmanPlayerServer, error){
 
     if err != nil {
         fmt.Println(err)
-        return player_server, errors.New("Failed to join game")
+        return errors.New("Failed to join game")
     }
 
     player_server.Pid = pid
     player_server.GameClient = client
     
-    return player_server, nil
+    return nil
 
 }
 
 
-func ChooseGame() (*playerserver.HangmanPlayerServer, error){
+func ChooseGame(player *playerserver.HangmanPlayerServer) error{
 
 
     var ip, port string
@@ -82,16 +82,16 @@ func ChooseGame() (*playerserver.HangmanPlayerServer, error){
     input = io.RequestLine()
     port = input.Result
 
-    updates, err := JoinGame(ip, port)
+    err := JoinGame(ip, port, player)
     
     if err != nil {
-        return updates, err
+        return err
     }
 
-    return updates, nil
+    return nil
 }
 
-func host() (*playerserver.HangmanPlayerServer, error) {
+func host(player *playerserver.HangmanPlayerServer) error {
 
     
 
@@ -102,27 +102,29 @@ func host() (*playerserver.HangmanPlayerServer, error) {
     //rpc.HandleHTTP()
 
     if(err != nil){
-        return nil, err
+        return  err
     }
 
     //fmt.Println(gameserver.GetPlayerCount())
 
     //Join the game as player
-    player, err := JoinGame("127.0.0.1", "1234")
+    err = JoinGame("127.0.0.1", "1234", player)
 
     if err != nil{
         fmt.Println(err)
-        return nil, err
+        return err
     }else{
         fmt.Println("Joined!")
     }
 
-    return player, nil
+    return nil
 
 }
 
-func WaitingForGameToEnd(){
-    for{}
+func WaitingForGameToEnd(player *playerserver.HangmanPlayerServer){
+    <- player.GameEnd
+
+    fmt.Println("Finished Waiting!")
 }
 
 func lobby(role int, player *playerserver.HangmanPlayerServer)(error){
@@ -162,7 +164,7 @@ func lobby(role int, player *playerserver.HangmanPlayerServer)(error){
         //fmt.Scanf("%d", &choice)
 
     if(input.Canceled == true){
-        WaitingForGameToEnd()
+        WaitingForGameToEnd(player)
     }else{
     
         choice, err = strconv.Atoi(input.Result)
@@ -179,14 +181,14 @@ func lobby(role int, player *playerserver.HangmanPlayerServer)(error){
                     fmt.Println("Error while starting game")
                     return err
                 }else{
-                    WaitingForGameToEnd()
+                    WaitingForGameToEnd(player)
                 }
             }         
 
 
         }else if choice == 2 {
 
-            err = player.QuitGame()
+            err = player.QuitLobby()
             if(err != nil){
                 fmt.Println("Error while quitting game")
                 return err
@@ -267,18 +269,18 @@ func main() {
     io, _ = asyncio.NewIoInstance()
     io.Launch()
 
-    fmt.Println("Welcome To HANGMAN!\n")
-
-    fmt.Println("[1] Host New Game\t\t[2] Join Game")
 
     var choice int
     var player *playerserver.HangmanPlayerServer
     var err error
-    //for true{
 
+    //Create PlayerServer once at the beginning
+    player, err = playerserver.Init(io)
 
-    //fmt.Scanf("%d", &choice)
     for{
+        fmt.Println("Welcome To HANGMAN!\n")
+
+        fmt.Println("[1] Host New Game\t\t[2] Join Game")
         input := io.RequestLine()
 
         choice, err = strconv.Atoi(input.Result)
@@ -289,9 +291,9 @@ func main() {
         }
 
         if choice == 1{
-            player, err  = host()
+            err  = host(player)
         } else if choice == 2{
-            player, err  = ChooseGame()
+            err  = ChooseGame(player)
         }
 
         if(err == nil){

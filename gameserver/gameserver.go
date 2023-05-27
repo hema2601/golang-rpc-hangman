@@ -84,6 +84,16 @@ func (h_gameserver *HangmanGameServer) GetPlayerByPid(pid PlayerId) (*Player, er
 
     return nil, errors.New("GetPlayerByBid: No player with pid" + strconv.Itoa(int(pid)))
 }
+func (h_gameserver *HangmanGameServer) GetIndexByPid(pid PlayerId) (int, error){
+
+    for i,p  := range h_gameserver.Players{
+        if p.Pid == pid{
+            return i, nil
+        }
+    }
+
+    return -1, errors.New("GetIndexByPid: No player with pid" + strconv.Itoa(int(pid)))
+}
 
 func (h_gameserver *HangmanGameServer)Join(addr *PlayerAddress, pid *PlayerId) error {
    
@@ -132,9 +142,37 @@ func (h_gameserver *HangmanGameServer)Join(addr *PlayerAddress, pid *PlayerId) e
 
 }
 
-func (h_gameserver *HangmanGameServer)Quit(pid *PlayerId, result *bool) error{
+func (h_gameserver *HangmanGameServer)QuitLobby(pid *PlayerId, result *bool) error{
 
     fmt.Println("Player", *pid, "quit the lobby")
+
+    h_gameserver.Quit(pid, result)
+
+    var tmp uint8
+    var err error
+    var player_info PlayerMetadata
+
+    player_info.PlayerCount = h_gameserver.PlayerCount
+    player_info.Players = make([]PlayerId, player_info.PlayerCount)
+
+    for i, p := range h_gameserver.Players{
+        player_info.Players[i] = p.Pid
+    }
+    for _, p := range h_gameserver.Players{
+        fmt.Println("Updating!")
+        err = p.Client.Call("HangmanPlayerServer.UpdateLobby", &player_info, &tmp)
+
+        if err != nil{
+            fmt.Println(err)
+        }
+    }
+
+    return nil
+}
+
+func (h_gameserver *HangmanGameServer)Quit(pid *PlayerId, result *bool) error{
+
+  //  fmt.Println("Player", *pid, "quit the lobby")
 
     var p *Player = nil
 
@@ -158,7 +196,7 @@ func (h_gameserver *HangmanGameServer)Quit(pid *PlayerId, result *bool) error{
     h_gameserver.PlayerCount--
 
     h_gameserver.Players = h_gameserver.Players[:h_gameserver.PlayerCount]
-
+/*
     var tmp uint8
 
 
@@ -178,7 +216,7 @@ func (h_gameserver *HangmanGameServer)Quit(pid *PlayerId, result *bool) error{
             fmt.Println(err)
         }
     }
-
+*/
     return nil
 }
 
@@ -195,26 +233,81 @@ func (h_gameserver *HangmanGameServer)StartGame(pid *PlayerId, result *bool) err
 
 
 
-    h_gameserver.H_game.Init()
+//    h_gameserver.H_game.Init()
 
     h_gameserver.Run()
 
     return nil
 }
 
-func (h_gameserver *HangmanGameServer)EndGame(pid *PlayerId, result *bool) error {
+func EndGamePlayerChoice(p Player, pid PlayerId, done chan PlayerId, error_chan chan error, res *asyncio.IoResponse){
+    
+    fmt.Println("Send msg to ", pid)
+    err := p.Client.Call("HangmanPlayerServer.EndGame", &pid, res)
+    if err != nil{
+        fmt.Println("Error in EndGamePlayerChoice:", err)
+    }
+    
+    fmt.Println("Received answer from ", pid)
+
+    done <- pid
+    error_chan <- err
+
+    return 
+
+}
+
+func (h_gameserver *HangmanGameServer)EndGame() (bool, error) {
     
 
-    var tmp1, tmp2 uint8 
+    res := make([]asyncio.IoResponse, h_gameserver.PlayerCount)
+    done := make(chan PlayerId)
+    error_chan := make(chan error)
 
-    for _, p := range h_gameserver.Players{
-        p.Client.Call("HangmanPlayerServer.EndGame", &tmp1, &tmp2)
+
+
+    for i, p := range h_gameserver.Players{
+        go EndGamePlayerChoice(p, p.Pid, done, error_chan, &res[i]) 
+    }
+    
+    var idx int
+    var curr_pid PlayerId
+    var temp bool
+    var err error
+
+    for i := 0; i < h_gameserver.PlayerCount; i++{
+        fmt.Println("Waiting for player response")
+         curr_pid = <- done;
+        fmt.Println("Response from Player", curr_pid)
+
+         idx, err = h_gameserver.GetIndexByPid(curr_pid);
+         
+         err = <- error_chan
+         if err != nil{
+            fmt.Println("Error in EndGame:", err)
+            return false, err
+         }
+    
+
+         if res[idx].Canceled == true {
+            h_gameserver.Quit(&curr_pid, &temp);
+         }else{
+            if res[idx].Result == "q"{
+                h_gameserver.Quit(&curr_pid, &temp);
+            }
+
+         }
+
+
+    }
+
+    if(h_gameserver.PlayerCount < 2){
+        h_gameserver.Running = false
     }
 
 
-    h_gameserver.Running = false
 
-    return nil
+    return h_gameserver.Running, nil
 }
 
 func GetPlayerString(p Player, pid PlayerId, done chan PlayerId, error_chan chan error, res *asyncio.IoResponse){
@@ -272,38 +365,47 @@ func (h_gameserver *HangmanGameServer)Run() error {
     var err error
 
     h_gameserver.LastTurn = PlayerId(0);
-
     for{
+        h_gameserver.H_game.Init()
 
-        response, err = h_gameserver.ChooseString()
+        for{
 
-        if response.Canceled == false {
-            h_gameserver.CurrPlayer = h_gameserver.LastTurn
-            h_gameserver.H_game.H_str.Init(response.Result)
-            break
+            response, err = h_gameserver.ChooseString()
+
+            if response.Canceled == false {
+                h_gameserver.CurrPlayer = h_gameserver.LastTurn
+                h_gameserver.H_game.H_str.Init(response.Result)
+                break
+            }
+
+
+            _, _ = h_gameserver.ChooseNextPlayer()
+
         }
 
+        for !h_gameserver.H_game.Over() {
 
-        _, _ = h_gameserver.ChooseNextPlayer()
+            h_gameserver.ShareState()
 
-    }
+            err = h_gameserver.NextTurn()
 
-    for !h_gameserver.H_game.Over() {
+            if err != nil{
+                fmt.Println("Error during Run:", err)
+                return nil
+            }
+
+        }
 
         h_gameserver.ShareState()
 
-        err = h_gameserver.NextTurn()
 
-        if err != nil{
-            fmt.Println("Error during Run:", err)
-            return nil
+        end_game, _ := h_gameserver.EndGame()
+
+        if end_game == false {
+            fmt.Println("Ending Game")
+            break
         }
-    
     }
-    
-    h_gameserver.ShareState()
-    //h_gameserver.GameOver()
-
     return nil
 }
 

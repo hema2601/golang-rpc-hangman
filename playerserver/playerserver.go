@@ -22,6 +22,7 @@ type HangmanPlayerServer struct {
     //Game_Client GameClient
     GameClient *rpc.Client
     GameStart chan int
+    GameEnd chan int
     Address gameserver.PlayerAddress
     io asyncio.IoInstance
 }
@@ -37,6 +38,31 @@ func (h_playerserver *HangmanPlayerServer) GetString( pid *gameserver.PlayerId, 
         fmt.Println("Waiting for Player", *pid, "to choose this round's string")
         
     }
+    return nil
+}
+
+func (h_playerserver *HangmanPlayerServer) EndGame( pid *gameserver.PlayerId, reply *asyncio.IoResponse) error{
+
+    fmt.Println("The game has ended. Send 'q' if you want to leave, send anything else if you want to continue. You have 10 seconds")
+
+  //  if(*pid == h_playerserver.Pid){
+    //    fmt.Println("Choose the String for this round! You have 20 seconds")
+       
+    *reply = h_playerserver.io.RequestLineTimeout(10) 
+
+    if reply.Canceled == true || reply.Result == "q"{
+        fmt.Println("Quit Game")
+        h_playerserver.GameEnd <- 1
+    }else{
+        fmt.Println("Continue")
+    }
+
+    //}else{
+    //    fmt.Println("Waiting for Player", *pid, "to choose this round's string")
+        
+    //}
+
+    fmt.Println("Returning")
     return nil
 }
 
@@ -77,11 +103,13 @@ func (h_playerserver *HangmanPlayerServer) StartGame(args *uint8, reply *uint8) 
 }
 
 
-func (p HangmanPlayerServer)QuitGame()(error){
+
+
+func (p HangmanPlayerServer)QuitLobby()(error){
     
     var res bool
 
-    err := p.GameClient.Call("HangmanGameServer.Quit", &p.Pid, &res)
+    err := p.GameClient.Call("HangmanGameServer.QuitLobby", &p.Pid, &res)
 
     if(err != nil){
         fmt.Println("Error while quitting game")
@@ -202,6 +230,7 @@ func Init(io asyncio.IoInstance) (*HangmanPlayerServer, error){
     h_playerserver.Address.Ip = "0.0.0.0"
     h_playerserver.Address.Port = port
     h_playerserver.GameStart = make(chan int, 1)
+    h_playerserver.GameEnd = make(chan int, 1)
     h_playerserver.io = io
 
   //  go http.Serve(listener, nil)
