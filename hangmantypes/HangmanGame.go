@@ -2,7 +2,7 @@ package hangmantypes
 
 import(
     "fmt"
-    "strconv"
+    //"strconv"
     "unicode"
     "hema/hangman/rpc/hangmandisplay"
 )
@@ -98,12 +98,12 @@ func (h_game HangmanGame) PrintState(){
 
     fmt.Println("")
 
-    fmt.Println("=============================")
+    /*fmt.Println("=============================")
     i := 0
     for i < 3{
         fmt.Println(h_game.Log[i])
         i++
-    }
+    }*/
     fmt.Println("=============================")
 
     fmt.Println("")
@@ -121,12 +121,12 @@ func (h_game *HangmanGame) DoTurn(str string) {
         guess := str
 
         if len(guess) != 1 && len(guess) != len(h_game.H_str.Word) {
-            h_game.InsertLog( "Invalid guess! Choose either one letter, or the entire Word.")
+            //h_game.InsertLog( "Invalid guess! Choose either one letter, or the entire Word.")
             return
         }
 
         if(len(guess) == 1 && !unicode.IsLetter(rune(guess[0]))){
-            h_game.InsertLog( "Invalid guess! Only alphabetic characters as single guess.")
+            //h_game.InsertLog( "Invalid guess! Only alphabetic characters as single guess.")
             return
         }
 
@@ -134,24 +134,24 @@ func (h_game *HangmanGame) DoTurn(str string) {
 
         if(count == 0){
             h_game.Stage++
-            h_game.InsertLog( "'" + guess + "' is not included...")
+            //h_game.InsertLog( "'" + guess + "' is not included...")
             return
         }
 
-        h_game.InsertLog("Your guess '" + guess + "' revealed " + strconv.Itoa(int(count)) + " new letter(s)!")     
+        //h_game.InsertLog("Your guess '" + guess + "' revealed " + strconv.Itoa(int(count)) + " new letter(s)!")     
 
         return
 }
 
 func (h_game *HangmanGame) Over() bool{
     if h_game.Stage == 9{
-        h_game.InsertLog("Game Over...")
+       // h_game.InsertLog("Game Over...")
         return true
     }
 
     if h_game.H_str.IsRevealed(){
 
-        h_game.InsertLog("Congrats! You guessed the right Word!")
+        //h_game.InsertLog("Congrats! You guessed the right Word!")
         return true
     }
 
